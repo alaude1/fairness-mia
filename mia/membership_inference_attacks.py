@@ -20,6 +20,11 @@ class black_box_benchmarks(object):
         self.t_tr_corr = (np.argmax(self.t_tr_outputs, axis=1)==self.t_tr_labels).astype(int)
         self.t_te_corr = (np.argmax(self.t_te_outputs, axis=1)==self.t_te_labels).astype(int)
         
+        self.s_tr_loss = self._loss_comp(self.s_tr_outputs, self.s_tr_labels)
+        self.s_te_loss = self._loss_comp(self.s_te_outputs, self.s_te_labels)
+        self.t_tr_loss = self._loss_comp(self.t_tr_outputs, self.t_tr_labels)
+        self.t_te_loss = self._loss_comp(self.t_te_outputs, self.t_te_labels)
+        
         self.s_tr_conf = np.array([self.s_tr_outputs[i, int(self.s_tr_labels[i])] for i in range(len(self.s_tr_labels))])
         self.s_te_conf = np.array([self.s_te_outputs[i, int(self.s_te_labels[i])] for i in range(len(self.s_te_labels))])
         self.t_tr_conf = np.array([self.t_tr_outputs[i, int(self.t_tr_labels[i])] for i in range(len(self.t_tr_labels))])
@@ -35,6 +40,8 @@ class black_box_benchmarks(object):
         self.t_tr_m_entr = self._m_entr_comp(self.t_tr_outputs, self.t_tr_labels)
         self.t_te_m_entr = self._m_entr_comp(self.t_te_outputs, self.t_te_labels)
         
+    def _loss_comp(self, probs, y):
+        return -np.sum(np.multiply(np.array([y, 1-y]).T, self._log_value(probs)), axis=1)
     
     def _log_value(self, probs, small_value=1e-30):
         return -np.log(np.maximum(probs, small_value))
@@ -91,8 +98,8 @@ class black_box_benchmarks(object):
             
             t_te_values_w_attr = t_te_values[t_te_attr==a]
             t_te_labels_w_attr = self.t_te_labels[t_te_attr==a]
-            total_a_tr = len(s_tr_labels_w_attr)
-            total_a_te = len(s_te_labels_w_attr)
+            total_a_tr = len(t_tr_labels_w_attr)
+            total_a_te = len(t_te_labels_w_attr)
             for num in range(self.num_classes):
                 thre = self._thre_setting(s_tr_values_w_attr[s_tr_labels_w_attr==num], s_te_values_w_attr[s_te_labels_w_attr==num])
                 t_tr_mem += np.sum(t_tr_values_w_attr[t_tr_labels_w_attr==num]>=thre)
@@ -101,12 +108,10 @@ class black_box_benchmarks(object):
                 s_tr_mem += np.sum(s_tr_values_w_attr[s_tr_labels_w_attr==num]>=thre)
                 s_te_non_mem += np.sum(s_te_values_w_attr[s_te_labels_w_attr==num]<thre)
                 
-                t_tr_mem_a += np.sum(s_tr_values_w_attr[s_tr_labels_w_attr==num]>=thre)
-                t_te_non_mem_a += np.sum(s_te_values_w_attr[s_te_labels_w_attr==num]<thre)
+                t_tr_mem_a += np.sum(t_tr_values_w_attr[t_tr_labels_w_attr==num]>=thre)
+                t_te_non_mem_a += np.sum(t_te_values_w_attr[t_te_labels_w_attr==num]<thre)
             mem_inf_acc_a = 0.5*(t_tr_mem_a/(total_a_tr+0.0) + t_te_non_mem_a/(total_a_te+0.0))
             print('For membership inference attack via {n}, group attr {a}, the attack acc is {acc:.3f}'.format(n=v_name,a=a, acc=mem_inf_acc_a))
-        mem_inf_acc = 0.5*(s_tr_mem/(len(self.s_tr_labels)+0.0) + s_te_non_mem/(len(self.s_te_labels)+0.0))
-        print('For membership inference attack via {n}, the shadow attack acc is {acc:.3f}'.format(n=v_name,acc=mem_inf_acc))
         mem_inf_acc = 0.5*(t_tr_mem/(len(self.t_tr_labels)+0.0) + t_te_non_mem/(len(self.t_te_labels)+0.0))
         print('For membership inference attack via {n}, the attack acc is {acc:.3f}'.format(n=v_name,acc=mem_inf_acc))
         return
@@ -132,11 +137,6 @@ class black_box_benchmarks(object):
             self._mem_inf_thre('entropy', -self.s_tr_entr, -self.s_te_entr, s_tr_attr, s_te_attr, -self.t_tr_entr, -self.t_te_entr, t_tr_attr, t_te_attr)
         if (all_methods) or ('modified entropy' in benchmark_methods):
             self._mem_inf_thre('modified entropy', -self.s_tr_m_entr, -self.s_te_m_entr, s_tr_attr, s_te_attr, -self.t_tr_m_entr, -self.t_te_m_entr, t_tr_attr, t_te_attr)
-        if (all_methods) or ('confidence' in benchmark_methods):
-            self._mem_inf_thre_no_class('confidence', self.s_tr_conf, self.s_te_conf, self.t_tr_conf, self.t_te_conf)
-        if (all_methods) or ('entropy' in benchmark_methods):
-            self._mem_inf_thre_no_class('entropy', -self.s_tr_entr, -self.s_te_entr, -self.t_tr_entr, -self.t_te_entr)
-        if (all_methods) or ('modified entropy' in benchmark_methods):
-            self._mem_inf_thre_no_class('modified entropy', -self.s_tr_m_entr, -self.s_te_m_entr, -self.t_tr_m_entr, -self.t_te_m_entr)
-
+        if (all_methods) or ('loss' in benchmark_methods):
+            self._mem_inf_thre('loss', self.s_tr_loss, self.s_te_loss, s_tr_attr, s_te_attr, self.t_tr_loss, self.t_te_loss, t_tr_attr, t_te_attr)
         return
